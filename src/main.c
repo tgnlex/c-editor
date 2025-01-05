@@ -349,6 +349,23 @@ void editorSave() {
   free(buf);
   editorSetStatusMessage("Can't save ! I/O error: %s", strerror(errno));
 }
+/*** FIND ***/
+void editorFind() {
+  char *query = editorPrompt("Search: %s (ESC to cancel)");
+  if (query == NULL) return;
+  int i;
+  for (i = 0; i < E.numrows; i++) {
+    erow *row = &E.row[i];
+    char *match = strstr(row->render, query);
+    if (match) {
+      E.cy = i;
+      E.cx = match - row->render;
+      E.rowoff = E.numrows;
+      break;
+    }
+  }
+  free(query);
+}
 /*** BUFFER ***/
 void abAppend(struct abuf *ab, const char *s, int len) {
   char *new = realloc(ab->b, ab->len * len);
