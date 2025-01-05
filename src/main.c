@@ -54,6 +54,8 @@ struct editorConfig E;
 
 /*** PROTOTYPES ***/
 void editorSetStatusMessage(const char *fmt, ...);
+void editorRefreshScreen();
+char *editorPrompt(char *prompt);
 /*** CONSTANTS & ENUMS ***/
 enum editorKey {
   BACKSPACE = 127,
@@ -68,6 +70,7 @@ enum editorKey {
   PAGE_DOWN = 1008,
 };
 const char *DBUF = "modified";
+const int PROMPT_BUF = 128;
 /*** UTILS ***/
 void die(const char *s) {
   write(STDOUT_FILENO, "\x1b[2J", 4);
@@ -321,7 +324,13 @@ void editorOpen(char *filename) {
   E.dirty = 0;
 }
 void editorSave() {
-  if (E.filename == NULL) return;
+  if (E.filename == NULL) {
+    E.filename = editorPrompt("Save as: %s (ESC to cancel)");
+    if (E.filename == NULL) {
+      editorSetStatusMessage("Save aborted");
+      return;
+    }
+  }
   int len;
   char *buf = editorRowsToString(&len);
   int fd = open(E.filename, O_RDWR | O_CREAT, 0644);
@@ -459,6 +468,38 @@ void editorSetStatusMessage(const char *fmt, ...) {
   vsnprintf(E.statusmsg, sizeof(E.statusmsg), fmt, ap);
   va_end(ap);
   E.statusmsg_time = time(NULL);
+}
+/*** PROMPT ***/
+char *editorPrompt(char *prompt) {
+  size_t bufsize = PROMPT_BUF;
+  char *buf = malloc(bufsize);
+  size_t buflen =0;
+  buf[0] = '\0';
+  while (1) {
+    editorSetStatusMessage(prompt, buf);
+    editorRefreshScreen();
+    int c = editorReadKey();
+    if (c == DEL_KEY || c == CTRL_KEY('h') || c == BACKSPACE) {
+      if (buflen != 0) buf[--buflen] = '\0';
+    } else if (c == '\x1b') {
+      editorSetStatusMessage("");
+      free(buf);
+      return NULL;
+    } else if (c == '\r') {
+
+      if (buflen != 0) {
+        editorSetStatusMessage("");
+        return buf;
+      }
+    } else if (!iscntrl(c) && c < 128) {
+      if (buflen == bufsize - 1) {
+        bufsize *= 2;
+        buf = realloc(buf, bufsize);
+      }
+      buf[buflen++] = c;
+      buf[buflen] = '\0';
+    }
+  }
 }
 /*** INPUT ***/
 void editorMoveCursor(int key) {
