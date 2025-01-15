@@ -30,6 +30,12 @@
 
 /*** CONSTANTS & ENUMS ***/
 const char *DBUF = "modified";
+const char *C_HL_extensions[] = { ".c", ".h", ".cpp", NULL };
+const char *C_HL_keywords[] = { 
+  "switch", "if", "while", "for", "break", "continue", "return", "else", "struct",
+  "union", "typedef", "static", "enum", "class", "case",
+  "int|", "long|", "double|", "float|" , "char|", "unsigned|", "signed|", "void|", NULL
+};
 enum editorKey {
   BACKSPACE = 127,
   ARROW_LEFT = 1000,
@@ -45,14 +51,17 @@ enum editorKey {
 enum highlights {
   HL_NORMAL = 0,
   HL_COMMENT = 1,
-  HL_STRING = 2,
-  HL_NUMBER = 3,
-  HL_MATCH = 4,
+  HL_KEYWORD_1 = 2,
+  HL_KEYWORD_2 = 3,
+  HL_STRING = 4,
+  HL_NUMBER = 5,
+  HL_MATCH = 6,
 };
 /*** DATA ***/
 struct editorSyntax {
   char *filetype;
   char **filematch;
+  char **keywords;
   char *singleline_comment_start;
   int flags;
 };
@@ -88,14 +97,13 @@ struct editorConfig {
   struct termios orig_termios;
 };
 struct editorConfig E;
-/*** FILETYPES ***/
-char *C_HL_extensions[] = { ".c", ".h", ".cpp", NULL };
 
 /*** SYNTAX ***/
 struct editorSyntax HLDB[] = {
   {
     "c",
     C_HL_extensions,
+    C_HL_keywords,
     "//",
     HL_HIGHLIGHT_NUMBERS | HL_HIGHLIGHT_STRINGS
   },
@@ -162,6 +170,7 @@ void editorUpdateSyntax(erow *row) {
   row->hl = realloc(row->hl, row->rsize);
   memset(row->hl, HL_NORMAL, row->rsize);
   if (E.syntax == NULL) return;
+  char **keywords = E.syntax->keywords;
   char *scs = E.syntax->singleline_comment_start;
   int scs_len = scs ? strlen(scs) : 0;
   int in_string = 0;
@@ -208,13 +217,32 @@ void editorUpdateSyntax(erow *row) {
         continue;
       }
     }
-    prev_sep = is_seperator(c);
-    i++;
+    if (prev_sep) {
+      int j;
+      for (j = 0; keywords[j]; j++) {
+        int klen = strlen(keywords[j]);
+        int kw2 = keywords[j][klen - 1] == '|';
+        if (kw2) klen--;
+
+        if (!strncmp(&row->render[i], keywords[j], klen) 
+          && is_seperator(row->render[i + klen])) {
+            memset(&row->hl[i], kw2 ? HL_KEYWORD_2 : HL_KEYWORD_1, klen);
+            i += klen;
+            break;
+          }
+        }
+        if (keywords[j] != NULL) {
+          prev_sep = 0;
+          continue;
+        }
+    }
   }
 }
 int editorSyntaxColor(int hl) {
   switch(hl) {
     case HL_COMMENT: return 36;
+    case HL_KEYWORD_1: return 33;
+    case HL_KEYWORD_2: return 32;
     case HL_STRING: return 35;
     case HL_NUMBER: return 31;
     case HL_MATCH: return 34;
